@@ -240,6 +240,7 @@ Terraform manages cloud infrastructure, whereas Ansible manages server configura
 
 ### Jenkins and Docker
 
+
 Jenkins automates the build and test stages. Docker packages the application and its runtime dependencies into an image.
 
 Each release uses an identifiable image tag so that a previous version can be selected for rollback.
