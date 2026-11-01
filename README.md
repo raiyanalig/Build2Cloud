@@ -95,38 +95,68 @@ Terraform provisions the AWS infrastructure, Ansible configures and deploys to t
 
 ```mermaid
 flowchart TB
-    DEV[Developer] -->|Push code| GIT[GitHub Repository]
-    GIT -->|Webhook| JENKINS[Jenkins CI/CD Pipeline]
-
-    subgraph CI[Continuous Integration and Security]
-        JENKINS --> TEST[Run Automated Tests]
-        TEST --> BUILD[Build Docker Image]
-        BUILD --> SCAN[Trivy Vulnerability Scan]
-        SCAN -->|Passes Policy| PUSH[Push Versioned Image]
-        SCAN -->|Fails Policy| FAIL[Fail Pipeline]
+    subgraph SOURCE["🚀 01 · Launchpad"]
+        DEV@{ shape: person, label: "Developer" }
+        GIT@{ shape: docs, label: "GitHub Repository" }
+        DEV -->|Push code| GIT
     end
 
-    PUSH --> ECR[Amazon ECR]
+    subgraph CI["🛠️ 02 · Build & Security Forge"]
+        JENKINS["Jenkins CI/CD Pipeline"]
+        TEST["🧪 Run Automated Tests"]
+        BUILD["📦 Build Docker Image"]
+        SCAN{"🛡️ Trivy Scan<br/>Passes security policy?"}
+        PUSH["Push Versioned Image"]
+        FAIL(["⛔ Pipeline Stopped"])
 
-    subgraph AWS[AWS Environment]
-        TF[Terraform] --> INFRA[EC2 / IAM / Security Groups / Network]
-        INFRA --> APPHOST[EC2 Application Server]
-        ECR -->|Pull Approved Image| APPHOST
-        ANSIBLE[Ansible Deployment Playbook] -->|Configure and Deploy| APPHOST
-        APPHOST --> NGINX[Nginx Reverse Proxy]
-        NGINX --> APP[Flask Application Container]
+        JENKINS --> TEST --> BUILD --> SCAN
+        SCAN -->|Pass| PUSH
+        SCAN -->|Fail| FAIL
     end
 
-    JENKINS -->|Execute Deployment Playbook| ANSIBLE
+    GIT -->|Webhook| JENKINS
+    PUSH --> ECR[("📦 Amazon ECR<br/>Versioned Images")]
 
-    APP --> HEALTH[Health Check]
-    HEALTH -->|Healthy| SUCCESS[Deployment Successful]
-    HEALTH -->|Unhealthy| ROLLBACK[Restore Previous Image]
-    ROLLBACK --> APPHOST
+    subgraph AWS["☁️ 03 · AWS Deployment Deck"]
+        TF{{"Terraform"}}
+        INFRA["EC2 / IAM / Security Groups / Network"]
+        ANSIBLE[["Ansible Deployment Playbook"]]
 
-    APPHOST --> METRICS[Node Exporter / Application Metrics]
-    METRICS --> PROM[Prometheus]
-    PROM --> GRAFANA[Grafana Dashboards]
+        subgraph RUNTIME["Application Runtime"]
+            APPHOST["🖥️ EC2 Application Server"]
+            NGINX["Nginx Reverse Proxy"]
+            APP["Flask Application Container"]
+            APPHOST --> NGINX --> APP
+        end
+
+        TF -.->|Provision| INFRA
+        INFRA --> APPHOST
+        ANSIBLE -->|Configure and deploy| APPHOST
+    end
+
+    ECR ==>|Pull approved image| APPHOST
+    JENKINS -.->|Execute deployment playbook| ANSIBLE
+
+    subgraph VERIFY["🩺 04 · Flight Check & Recovery"]
+        HEALTH{"Health Check<br/>Application healthy?"}
+        SUCCESS(["✅ Deployment Successful"])
+        ROLLBACK["↩️ Restore Previous Image"]
+
+        HEALTH -->|Healthy| SUCCESS
+        HEALTH -->|Unhealthy| ROLLBACK
+    end
+
+    APP --> HEALTH
+    ROLLBACK -->|Redeploy previous version| APPHOST
+
+    subgraph OBSERVE["📡 05 · Mission Control"]
+        METRICS["Node Exporter / Application Metrics"]
+        PROM[("Prometheus")]
+        GRAFANA@{ shape: display, label: "Grafana Dashboards" }
+        METRICS -.-> PROM -.-> GRAFANA
+    end
+
+    APPHOST -.->|Telemetry| METRICS
 ```
 
 ## 5. CI/CD Workflow
@@ -151,42 +181,50 @@ The intended application release process works as follows:
 
 ```mermaid
 sequenceDiagram
+    autonumber
     actor Developer
     participant GitHub
     participant Jenkins
-    participant Trivy
-    participant ECR as Amazon ECR
-    participant Ansible
+    participant Trivy as Trivy<br/>Security Scanner
+    participant ECR as Amazon ECR<br/>Image Registry
+    participant Ansible as Ansible<br/>Deployment
     participant EC2 as EC2 / Docker
-    participant App as Flask Application
+    participant App as Flask App
 
+    Note over Developer,Jenkins: 1. Build
     Developer->>GitHub: Push code change
-    GitHub-->>Jenkins: Webhook notification
-    Jenkins->>GitHub: Checkout source code
-    Jenkins->>Jenkins: Run tests and build image
+    GitHub-->>Jenkins: Trigger pipeline via webhook
+    Jenkins->>GitHub: Check out source code
+    Jenkins->>Jenkins: Run tests and build Docker image
+
+    Note over Jenkins,Trivy: 2. Security check
     Jenkins->>Trivy: Scan Docker image
 
     alt Security policy passes
         Trivy-->>Jenkins: Scan passed
-        Jenkins->>ECR: Push versioned image
-        ECR-->>Jenkins: Image available
-        Jenkins->>Ansible: Start deployment with image tag
-        Ansible->>EC2: Pull and deploy image
-        EC2->>App: Start application container
-        Ansible->>App: Call health endpoint
 
-        alt Application is healthy
-            App-->>Ansible: Healthy response
+        Note over Jenkins,ECR: 3. Publish image
+        Jenkins->>ECR: Push image with version tag
+        ECR-->>Jenkins: Image available
+
+        Note over Ansible,App: 4. Deploy and verify
+        Jenkins->>Ansible: Deploy image with version tag
+        Ansible->>EC2: Pull image and deploy container
+        EC2->>App: Start application
+        Ansible->>App: Check health endpoint
+
+        alt Health check passes
+            App-->>Ansible: Healthy
             Ansible-->>Jenkins: Deployment successful
-        else Application is unhealthy
-            App-->>Ansible: Failed health check
+        else Health check fails
+            App-->>Ansible: Unhealthy
             Ansible->>EC2: Restore previous image
-            Ansible-->>Jenkins: Deployment failed / rollback attempted
+            Ansible-->>Jenkins: Deployment failed&#59; rollback attempted
         end
 
     else Security policy fails
         Trivy-->>Jenkins: Vulnerability threshold exceeded
-        Jenkins-->>Developer: Pipeline failed
+        Jenkins-->>Developer: Pipeline failed&#59; deployment blocked
     end
 ```
 
