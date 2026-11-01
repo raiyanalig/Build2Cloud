@@ -178,18 +178,7 @@ The intended application release process works as follows:
 13. Prometheus collects configured metrics and Grafana displays dashboards.
 
 ### CI/CD Sequence Diagram
-
 ```mermaid
-sequenceDiagram
-    autonumber
-    actor Developer
-    participant GitHub
-    participant Jenkins
-    participant Trivy as Trivy<br/>Security Scanner
-    participant ECR as Amazon ECR<br/>Image Registry
-    participant Ansible as Ansible<br/>Deployment
-    participant EC2 as EC2 / Docker
-    participant App as Flask App
 
     Note over Developer,Jenkins: 1. Build
     Developer->>GitHub: Push code change
@@ -227,7 +216,6 @@ sequenceDiagram
         Jenkins-->>Developer: Pipeline failed&#59; deployment blocked
     end
 ```
-
 ## 6. How the Main Tools Work Together
 
 ### Terraform and Ansible
