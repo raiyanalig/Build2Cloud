@@ -177,45 +177,7 @@ The intended application release process works as follows:
 12. If the release fails, the process attempts to restore the previous known-good image and records the failure.
 13. Prometheus collects configured metrics and Grafana displays dashboards.
 
-### CI/CD Sequence Diagram
-```mermaid
 
-    Note over Developer,Jenkins: 1. Build
-    Developer->>GitHub: Push code change
-    GitHub-->>Jenkins: Trigger pipeline via webhook
-    Jenkins->>GitHub: Check out source code
-    Jenkins->>Jenkins: Run tests and build Docker image
-
-    Note over Jenkins,Trivy: 2. Security check
-    Jenkins->>Trivy: Scan Docker image
-
-    alt Security policy passes
-        Trivy-->>Jenkins: Scan passed
-
-        Note over Jenkins,ECR: 3. Publish image
-        Jenkins->>ECR: Push image with version tag
-        ECR-->>Jenkins: Image available
-
-        Note over Ansible,App: 4. Deploy and verify
-        Jenkins->>Ansible: Deploy image with version tag
-        Ansible->>EC2: Pull image and deploy container
-        EC2->>App: Start application
-        Ansible->>App: Check health endpoint
-
-        alt Health check passes
-            App-->>Ansible: Healthy
-            Ansible-->>Jenkins: Deployment successful
-        else Health check fails
-            App-->>Ansible: Unhealthy
-            Ansible->>EC2: Restore previous image
-            Ansible-->>Jenkins: Deployment failed&#59; rollback attempted
-        end
-
-    else Security policy fails
-        Trivy-->>Jenkins: Vulnerability threshold exceeded
-        Jenkins-->>Developer: Pipeline failed&#59; deployment blocked
-    end
-```
 ## 6. How the Main Tools Work Together
 
 ### Terraform and Ansible
